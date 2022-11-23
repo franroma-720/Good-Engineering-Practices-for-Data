@@ -1,0 +1,160 @@
+---
+title: "R Data Testing Examples"
+output:
+  html_document:
+    df_print: paged
+---
+
+This R Markdown Notebook is a tutorial for how to do Data Testing, or Data
+Validation, in R with examples using the `validate`
+[package](https://cran.r-project.org/web/packages/validate/vignettes/cookbook.html).
+Some of you may already be familiar with this package from the RSC templates
+that we use.
+
+The general idea of this package is to create a set of rules or expectations
+about your data set and then check that the data set meets these rules or
+expectations.
+
+```{r setup}
+library(validate)
+```
+
+## Variable Check Examples
+
+In the examples below, we will check that certain constraints or properties
+are met on a field-by-field or column-by-column basis using the `cars` data set.
+
+```{r cars}
+data(cars)
+head(cars, 10)
+```
+
+The 7 rules we will set and check for this data set are to make sure:
+
+- both the `speed` and `dist` columns are numeric
+- both the `speed` and `dist` columns do NOT have negative values
+- the ratio of `speed/dist` is between 0 and 1.5 (inclusive)
+- both the `speed` and `dist` columns do not have missing or `NA` values
+
+All of the records in this data set meet these constraints except for two
+records that failed the `speed/dist` ratio rule.
+
+```{r variable_check}
+rules <- validator(
+  is.numeric(speed),
+  is.numeric(dist),
+  speed >= 0,
+  dist >= 0,
+  in_range(speed / dist, 0, 1.5),
+  !is.na(speed),
+  !is.na(dist)
+)
+out <- confront(cars, rules)
+summary(out)
+```
+
+The `plot` function displays a visual summary of which rules failed.
+
+```{r variable_check_plot}
+plot(out)
+```
+
+The `violating` function presents records that violate the record-level rules.
+In this example, that means all rules except for the data type rules.
+We can use this function to see which two records failed the `speed/dist` ratio
+rule.
+
+```{r variable_check_violating}
+violating(cars, out[3:7])
+```
+
+
+## Uniqueness and Availability Examples
+
+In the examples below, we will check column uniqueness and data availability
+using the `samplonomy` data set.
+
+```{r samplonomy}
+data(samplonomy)
+head(samplonomy, 10)
+```
+
+
+### Uniqueness 
+
+First, we will check that each record has a unique combination of `region`,
+`period`, and `measure`. Essentially we are defining what combination
+of columns are the primary key (PK) in this data set and checking that the
+data set does not violate a PK constraint.
+
+When checking uniqueness, it is also recommended to check that the columns
+included in the uniqueness rule do not contain missing or `NA` values as well
+since the concept of a primary key traditionally does not allow for missing or
+null values. Not checking for missing values in this columns could allow for
+some edge cases to pass the uniqueness data validation tests that really should
+be failing.
+
+In general, primary key constraints should be defined in the SAM.
+If they are defined at SAM definition then there is no possible way to have a
+PK constraint violated when pulling that data into an R script and so these
+types of tests should not be necessary.
+However, there may be exceptions to that rule. For example, if the query to pull
+data into the R script uses a join to applies some advanced filtering logic.
+Please consider where you apply these types of data quality checks.
+Ideally, they should be placed as far upstream as it makes sense to do so.
+
+```{r uniqueness}
+rule <- validator(
+  !is.na(region),
+  !is.na(period),
+  !is.na(measure),
+  is_unique(region, period, measure)
+)
+out <- confront(samplonomy, rule)
+summary(out)
+```
+
+The `violating` function presents the records that violate the uniqueness rule
+defined above.
+
+```{r uniqueness_violating}
+violating(samplonomy, out)
+```
+
+
+### Availability 
+
+Next, we will test using the `contains_at_least` and `contains_exactly`
+functions:
+
+- that each `region` and `measure` in this data set have a row representing
+every year from 2014 to 2019
+- for each `measure` we have a row representing every year-quarter from 2014 to
+2019 for the Agria and Induston regions only
+
+29 records fail this first data availability constraint and 300 records fail
+this second data availability constraint.
+
+```{r availability}
+
+# keyset for every year-quarter per measure for two regions
+years <- as.character(2014:2019)
+quarters <- paste0("Q", 1:4)
+period_region_ai_keyset <- expand.grid(
+  region = c("Agria", "Induston"),
+  period = sapply(years, paste0, quarters)
+)
+
+rule <- validator(
+  contains_at_least(
+    keys = data.frame(period = as.character(2014:2019)),
+    by = list(region, measure)
+  ),
+  contains_at_least(keys = minimal_keys, by = measure)
+)
+
+out <- confront(samplonomy,
+                rule,
+                ref = list(minimal_keys = period_region_ai_keyset))
+summary(out)
+```

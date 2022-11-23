@@ -1,0 +1,30 @@
+## Folders -----------------------------
+*_files/*
+.Rproj.user/*
+renv/*
+report_cache/*
+rsconnect/*
+.vscode/*
+
+## Local R Files ----------------------
+.RData
+.Rhistory
+*.Rproj*
+
+
+## Other File Formats -----------------
+*.csv*
+*.doc*
+*.feather
+*.html
+*.log
+*.ppt*
+*.txt*
+*.xls*
+*.zip
+
+## Temp/Swap Files --------------------
+\#*
+*.swp
+.DS_Store
+ pg
